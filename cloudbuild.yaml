@@ -1,0 +1,88 @@
+# Auto-deploy cuando haces push a master
+steps:
+  # Deploy Node API primero
+  - name: 'gcr.io/cloud-builders/gcloud'
+    dir: 'node-api'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'node-api'
+      - '--source=.'
+      - '--platform=managed'
+      - '--region=us-central1'
+      - '--allow-unauthenticated'
+      - '--port=3000'
+      - '--quiet'
+    id: 'deploy-node-api'
+
+  # Obtener URL de Node API
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        NODE_URL=$$(gcloud run services describe node-api --region=us-central1 --format="value(status.url)")
+        echo "NODE_API_URL=$$NODE_URL" > /workspace/node-url.env
+        echo "✅ Node API URL: $$NODE_URL"
+    id: 'get-node-url'
+    waitFor: ['deploy-node-api']
+
+  # Deploy Go API con la URL de Node API
+  - name: 'gcr.io/cloud-builders/gcloud'
+    dir: 'go-api'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        source /workspace/node-url.env
+        echo "🚀 Deploying Go API with NODE_API_URL: $$NODE_API_URL"
+        gcloud run deploy go-api \
+          --source=. \
+          --platform=managed \
+          --region=us-central1 \
+          --allow-unauthenticated \
+          --port=8080 \
+          --set-env-vars="NODE_API_URL=$$NODE_API_URL,DOCKER_ENV=true" \
+          --quiet
+    id: 'deploy-go-api'
+    waitFor: ['get-node-url']
+
+  # Test automático después del deploy
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        source /workspace/node-url.env
+        GO_URL=$$(gcloud run services describe go-api --region=us-central1 --format="value(status.url)")
+        
+        echo "🧪 Testing deployments..."
+        echo "Node API: $$NODE_API_URL"
+        echo "Go API: $$GO_URL"
+        
+        # Test health checks
+        curl -sf "$$NODE_API_URL/health" || (echo "❌ Node API health failed" && exit 1)
+        curl -sf "$$GO_URL/health" || (echo "❌ Go API health failed" && exit 1)
+        
+        # Test functional endpoints
+        curl -sf -X POST "$$NODE_API_URL/stats" \
+          -H "Content-Type: application/json" \
+          -d '{"q":[[1,0],[0,1]],"r":[[2,1],[0,3]]}' || (echo "❌ Node API stats failed" && exit 1)
+        
+        curl -sf -X POST "$$GO_URL/qr" \
+          -H "Content-Type: application/json" \
+          -d '{"matrix":[[1,2],[3,4]]}' || (echo "❌ Go API QR failed" && exit 1)
+        
+        echo "✅ All tests passed!"
+        echo "🎉 Auto-deployment successful!"
+        echo "📋 URLs:"
+        echo "   Node API: $$NODE_API_URL"
+        echo "   Go API: $$GO_URL"
+    id: 'test-deployment'
+    waitFor: ['deploy-go-api']
+
+# Configuración adicional
+options:
+  logging: CLOUD_LOGGING_ONLY
+  
+timeout: '1200s'  # 20 minutos máximo
