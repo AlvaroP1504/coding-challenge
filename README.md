@@ -279,18 +279,81 @@ Los servicios se comunican a través de la red `api-network`:
 - `go-api` accesible internamente como `go-api:3001`
 - `node-api` accesible internamente como `node-api:3002`
 
+## 🔒 Autenticación JWT (Opcional)
+
+### **Configuración**
+```bash
+# Habilitar JWT en Node API
+export JWT_REQUIRED=true
+export JWT_SECRET=your-secret-key
+
+# Token para Go API
+export JWT_TOKEN=your-jwt-token
+```
+
+### **Generar Token de Prueba**
+```bash
+# Generar token con secret personalizado
+cd node-api
+node generate-jwt.js "my-secret" "2h"
+
+# Output:
+# Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# export JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### **Usar JWT**
+```bash
+# 1. Generar token
+TOKEN=$(node node-api/generate-jwt.js "dev-secret" | grep -o 'eyJ[^"]*')
+
+# 2. Configurar Node API
+export JWT_REQUIRED=true
+export JWT_SECRET=dev-secret
+
+# 3. Configurar Go API  
+export JWT_TOKEN=$TOKEN
+
+# 4. Restart servicios
+docker-compose up --build
+```
+
+### **Test con JWT**
+```bash
+# Con JWT
+curl -H "Authorization: Bearer $TOKEN" \
+  -X POST http://localhost:3000/stats \
+  -H "Content-Type: application/json" \
+  -d '{"q":[[1,0],[0,1]],"r":[[2,1],[0,3]]}'
+
+# Sin JWT (fallará si JWT_REQUIRED=true)
+curl -X POST http://localhost:3000/stats \
+  -H "Content-Type: application/json" \
+  -d '{"q":[[1,0],[0,1]],"r":[[2,1],[0,3]]}'
+```
+
 ## 🧪 Testing
 
 ### Go API
 ```bash
 cd go-api
-go test -v
+go test -v ./...
 ```
 
 ### Node API
 ```bash
 cd node-api
 npm test
+```
+
+### Lista Completa de Testing
+
+**Para prueba técnica - ejecutar TODOS los comandos:**
+
+```bash
+# Ver lista completa de comandos
+./test-all.sh  # Linux/Mac
+./test-all.ps1 # Windows PowerShell
 ```
 
 ### Tests de Integración (Manual)
@@ -437,5 +500,6 @@ MIT License - Ver [LICENSE](LICENSE) para más detalles.
 ---
 
 **Desarrollado como parte de un coding challenge técnico.**
-#   P r o d u c t i o n   C I / C D   P i p e l i n e   A c t i v e    
+#   P r o d u c t i o n   C I / C D   P i p e l i n e   A c t i v e   
+ 
  

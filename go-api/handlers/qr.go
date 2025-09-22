@@ -100,13 +100,28 @@ func sendQRToNodeAPI(qrResult *linear.QRResult) (*StatsResponse, error) {
 		return nil, fmt.Errorf("failed to marshal QR payload: %w", err)
 	}
 	
+	// Crear request con headers
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	// Headers básicos
+	req.Header.Set("Content-Type", "application/json")
+	
+	// JWT token si está configurado
+	if jwtToken := os.Getenv("JWT_TOKEN"); jwtToken != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
+		log.Printf("🔒 Adding JWT token to request")
+	}
+	
 	// Crear cliente HTTP con timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	
-	// Hacer POST request
-	resp, err := client.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
+	// Hacer request
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call node-api: %w", err)
 	}

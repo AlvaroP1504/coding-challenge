@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { calculateCombinedStats } from './lib/stats';
 import { isDiagonal } from './lib/diagonal';
+import { jwtMiddleware, isJWTEnabled } from './lib/jwt';
 
 const router = Router();
 
@@ -29,8 +30,9 @@ interface StatsResponse {
 /**
  * POST /stats
  * Calcula estadísticas de matrices Q y R
+ * Middleware JWT opcional si JWT_REQUIRED=true
  */
-router.post('/stats', (req: Request, res: Response): void => {
+router.post('/stats', jwtMiddleware, (req: Request, res: Response): void => {
   try {
     // Validar request body con Zod
     const validationResult = StatsRequestSchema.safeParse(req.body);
@@ -115,7 +117,11 @@ router.post('/stats', (req: Request, res: Response): void => {
  * Health check endpoint
  */
 router.get('/health', (_req: Request, res: Response): void => {
-  res.json({ ok: true });
+  res.json({ 
+    ok: true,
+    jwt_enabled: isJWTEnabled(),
+    jwt_required: process.env.JWT_REQUIRED === 'true'
+  });
 });
 
 /**
