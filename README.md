@@ -437,3 +437,5 @@ MIT License - Ver [LICENSE](LICENSE) para más detalles.
 ---
 
 **Desarrollado como parte de un coding challenge técnico.**
+#   P r o d u c t i o n   C I / C D   P i p e l i n e   A c t i v e    
+ 
