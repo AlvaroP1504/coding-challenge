@@ -56,14 +56,12 @@ export function jwtMiddleware(req: Request, res: Response, next: NextFunction): 
  * Genera un token de prueba (para desarrollo)
  */
 export function generateTestToken(secret: string, expiresIn: string = '1h'): string {
-  return jwt.sign(
-    { 
-      sub: 'test-user',
-      role: 'admin' 
-    },
-    secret,
-    { expiresIn }
-  );
+  const payload = { 
+    sub: 'test-user',
+    role: 'admin' 
+  };
+  
+  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
 }
 
 /**
