@@ -1,194 +1,139 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
-	"gonum.org/v1/gonum/mat"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/youruser/coding-challenge/go-api/handlers"
 )
 
-type MatrixRequest struct {
-	Matrix [][]float64 `json:"matrix"`
-}
-
-type QRResponse struct {
-	Q [][]float64 `json:"q"`
-	R [][]float64 `json:"r"`
-}
-
-type RotateResponse struct {
-	Rotated [][]float64 `json:"rotated"`
-}
-
-type StatsRequest struct {
-	Matrix [][]float64 `json:"matrix"`
-	Source string      `json:"source"`
-}
-
 func main() {
+	// Verificar si es un health check
+	if len(os.Args) > 1 && os.Args[1] == "--health-check" {
+		healthCheck()
+		return
+	}
+
+	// Crear aplicación Fiber
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
 			}
+			
+			log.Printf("Error: %v", err)
 			return ctx.Status(code).JSON(fiber.Map{
 				"error": err.Error(),
 			})
 		},
+		// Configuración adicional
+		DisableStartupMessage: false,
+		AppName:              "Go API - QR Factorization Service",
 	})
 
-	// Middleware
-	app.Use(logger.New())
-	app.Use(cors.New())
+	// Middleware globales
+	app.Use(recover.New()) // Recuperar de panics
+	app.Use(logger.New(logger.Config{
+		Format: "[${time}] ${status} - ${method} ${path} - ${latency}\n",
+	}))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
+	}))
 
-	// Health check
+	// Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "service": "go-api"})
+		return c.JSON(fiber.Map{
+			"ok": true,
+			"service": "go-api",
+			"status": "healthy",
+		})
 	})
 
-	// QR Factorization endpoint (obligatorio)
-	app.Post("/qr", handleQRFactorization)
+	// API endpoints
+	app.Post("/qr", handlers.HandleQR)
+	app.Post("/rotate", handlers.HandleRotate)
 
-	// Rotate matrix endpoint (opcional)
-	app.Post("/rotate", handleRotateMatrix)
+	// 404 handler
+	app.Use("*", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Endpoint not found",
+			"available_endpoints": []string{
+				"GET /health",
+				"POST /qr",
+				"POST /rotate",
+			},
+		})
+	})
 
-	log.Println("🚀 Go API ejecutándose en puerto 3001")
-	log.Fatal(app.Listen(":3001"))
+	// Obtener puerto desde env var
+	port := getPort()
+	
+	log.Printf("🚀 Go API starting on port %s", port)
+	log.Printf("📍 NODE_API_URL: %s", getNodeAPIURL())
+	log.Printf("🔗 Available endpoints:")
+	log.Printf("   GET  /health")
+	log.Printf("   POST /qr")
+	log.Printf("   POST /rotate")
+	
+	// Iniciar servidor
+	if err := app.Listen(":" + port); err != nil {
+		log.Fatalf("❌ Failed to start server: %v", err)
+	}
 }
 
-func handleQRFactorization(c *fiber.Ctx) error {
-	var req MatrixRequest
-	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid JSON")
+// getPort obtiene el puerto desde env var PORT, default 8080
+func getPort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
 	}
-
-	if len(req.Matrix) == 0 || len(req.Matrix[0]) == 0 {
-		return fiber.NewError(fiber.StatusBadRequest, "Empty matrix")
-	}
-
-	// Convertir a mat.Dense
-	rows, cols := len(req.Matrix), len(req.Matrix[0])
-	data := make([]float64, rows*cols)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			data[i*cols+j] = req.Matrix[i][j]
-		}
-	}
-
-	matrix := mat.NewDense(rows, cols, data)
-
-	// QR Factorization
-	var qr mat.QR
-	qr.Factorize(matrix)
-
-	var q, r mat.Dense
-	qr.QTo(&q)
-	qr.RTo(&r)
-
-	// Convertir de vuelta a slices
-	qRows, qCols := q.Dims()
-	qMatrix := make([][]float64, qRows)
-	for i := 0; i < qRows; i++ {
-		qMatrix[i] = make([]float64, qCols)
-		for j := 0; j < qCols; j++ {
-			qMatrix[i][j] = q.At(i, j)
-		}
-	}
-
-	rRows, rCols := r.Dims()
-	rMatrix := make([][]float64, rRows)
-	for i := 0; i < rRows; i++ {
-		rMatrix[i] = make([]float64, rCols)
-		for j := 0; j < rCols; j++ {
-			rMatrix[i][j] = r.At(i, j)
-		}
-	}
-
-	response := QRResponse{
-		Q: qMatrix,
-		R: rMatrix,
-	}
-
-	// Enviar estadísticas a Node API
-	go sendStatsToNodeAPI(req.Matrix, "qr")
-
-	return c.JSON(response)
+	return "8080"
 }
 
-func handleRotateMatrix(c *fiber.Ctx) error {
-	var req MatrixRequest
-	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid JSON")
+// getNodeAPIURL obtiene la URL de node-api desde env var
+func getNodeAPIURL() string {
+	if url := os.Getenv("NODE_API_URL"); url != "" {
+		return url
 	}
-
-	if len(req.Matrix) == 0 || len(req.Matrix[0]) == 0 {
-		return fiber.NewError(fiber.StatusBadRequest, "Empty matrix")
+	
+	// Diferente default según si estamos en Docker o local
+	if os.Getenv("DOCKER_ENV") != "" {
+		return "http://node-api:3000"
 	}
-
-	// Rotar matriz 90 grados en sentido horario
-	rotated := rotateMatrix90(req.Matrix)
-
-	response := RotateResponse{
-		Rotated: rotated,
-	}
-
-	// Enviar estadísticas a Node API
-	go sendStatsToNodeAPI(req.Matrix, "rotate")
-
-	return c.JSON(response)
+	
+	return "http://localhost:3000"
 }
 
-func rotateMatrix90(matrix [][]float64) [][]float64 {
-	rows := len(matrix)
-	cols := len(matrix[0])
+// healthCheck verifica que el servicio esté funcionando (para Docker health check)
+func healthCheck() {
+	port := getPort()
+	url := fmt.Sprintf("http://localhost:%s/health", port)
 	
-	// Nueva matriz con dimensiones intercambiadas
-	rotated := make([][]float64, cols)
-	for i := range rotated {
-		rotated[i] = make([]float64, rows)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
 	}
 	
-	// Rotar 90 grados en sentido horario
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			rotated[j][rows-1-i] = matrix[i][j]
-		}
-	}
-	
-	return rotated
-}
-
-func sendStatsToNodeAPI(matrix [][]float64, source string) {
-	nodeAPIURL := "http://node-api:3002/stats"
-	
-	statsReq := StatsRequest{
-		Matrix: matrix,
-		Source: source,
-	}
-	
-	jsonData, err := json.Marshal(statsReq)
+	resp, err := client.Get(url)
 	if err != nil {
-		log.Printf("Error marshaling stats request: %v", err)
-		return
-	}
-	
-	resp, err := http.Post(nodeAPIURL, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("Error sending stats to Node API: %v", err)
-		return
+		log.Printf("Health check failed: %v", err)
+		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Node API returned status: %d", resp.StatusCode)
-	} else {
-		log.Printf("Stats sent successfully to Node API for operation: %s", source)
+		log.Printf("Health check failed: status %d", resp.StatusCode)
+		os.Exit(1)
 	}
+	
+	log.Println("Health check passed")
+	os.Exit(0)
 }

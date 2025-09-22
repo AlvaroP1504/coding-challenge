@@ -6,7 +6,7 @@ import { statsRouter } from './routes/stats';
 import { healthRouter } from './routes/health';
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet());
@@ -15,9 +15,10 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 
 // Error handling middleware
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction): void => {
   if (error instanceof SyntaxError && 'body' in error) {
-    return res.status(400).json({ error: 'Invalid JSON format' });
+    res.status(400).json({ error: 'Invalid JSON format' });
+    return;
   }
   next();
 });

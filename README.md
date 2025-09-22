@@ -85,20 +85,21 @@ npm test
 
 ## 📡 API Endpoints
 
-### Go API (Puerto 3001)
+### Go API (Puerto 8080)
 
 #### `GET /health`
 Verifica el estado del servicio.
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:8080/health
 ```
 
 **Respuesta:**
 ```json
 {
-  "status": "ok",
-  "service": "go-api"
+  "ok": true,
+  "service": "go-api",
+  "status": "healthy"
 }
 ```
 
@@ -106,12 +107,13 @@ curl http://localhost:3001/health
 Realiza factorización QR de una matriz.
 
 ```bash
-curl -X POST http://localhost:3001/qr \
+curl -X POST http://localhost:8080/qr \
   -H "Content-Type: application/json" \
   -d '{
     "matrix": [
       [1, 2],
-      [3, 4]
+      [3, 4],
+      [5, 6]
     ]
   }'
 ```
@@ -119,14 +121,13 @@ curl -X POST http://localhost:3001/qr \
 **Respuesta:**
 ```json
 {
-  "q": [
-    [-0.31622776601683794, -0.9486832980505138],
-    [-0.9486832980505138, 0.31622776601683794]
-  ],
-  "r": [
-    [-3.1622776601683795, -4.427188724235731],
-    [0, -0.6324555320336759]
-  ]
+  "max": 0.894,
+  "min": -0.632,
+  "avg": 0.123,
+  "sum": 2.456,
+  "isDiagonalQ": false,
+  "isDiagonalR": false,
+  "processedAt": "2024-01-15T10:30:00.000Z"
 }
 ```
 
@@ -134,13 +135,14 @@ curl -X POST http://localhost:3001/qr \
 Rota una matriz 90 grados en sentido horario.
 
 ```bash
-curl -X POST http://localhost:3001/rotate \
+curl -X POST http://localhost:8080/rotate \
   -H "Content-Type: application/json" \
   -d '{
     "matrix": [
       [1, 2, 3],
       [4, 5, 6]
-    ]
+    ],
+    "direction": "right"
   }'
 ```
 
@@ -155,13 +157,13 @@ curl -X POST http://localhost:3001/rotate \
 }
 ```
 
-### Node API (Puerto 3002)
+### Node API (Puerto 3000)
 
 #### `GET /health`
 Verifica el estado del servicio.
 
 ```bash
-curl http://localhost:3002/health
+curl http://localhost:3000/health
 ```
 
 **Respuesta:**
@@ -178,7 +180,7 @@ curl http://localhost:3002/health
 Calcula estadísticas de una matriz (max, min, avg, sum, diagonal).
 
 ```bash
-curl -X POST http://localhost:3002/stats \
+curl -X POST http://localhost:3000/stats \
   -H "Content-Type: application/json" \
   -d '{
     "matrix": [
@@ -208,7 +210,7 @@ curl -X POST http://localhost:3002/stats \
 Obtiene el historial de estadísticas procesadas.
 
 ```bash
-curl http://localhost:3002/stats/history
+curl http://localhost:3000/stats/history
 ```
 
 **Respuesta:**
@@ -297,18 +299,78 @@ npm test
 # 1. Levantar servicios
 docker-compose up -d
 
-# 2. Test completo del flujo
-curl -X POST http://localhost:3001/qr \
+# 2. Test QR factorization (devuelve estadísticas de node-api)
+curl -X POST http://localhost:8080/qr \
   -H "Content-Type: application/json" \
-  -d '{"matrix": [[1,2],[3,4]]}'
+  -d '{"matrix": [[1,2],[3,4],[5,6]]}'
 
-# 3. Verificar que llegaron estadísticas
-curl http://localhost:3002/stats/history
+# 3. Verificar historial en node-api
+curl http://localhost:3000/stats/history
 
-# 4. Test rotación
-curl -X POST http://localhost:3001/rotate \
+# 4. Test rotación (no llama a node-api)
+curl -X POST http://localhost:8080/rotate \
   -H "Content-Type: application/json" \
-  -d '{"matrix": [[1,2,3],[4,5,6]]}'
+  -d '{"matrix": [[1,2,3],[4,5,6]], "direction": "right"}'
+
+# 5. Test estadísticas directas en node-api
+curl -X POST http://localhost:3000/stats \
+  -H "Content-Type: application/json" \
+  -d '{"matrix": [[1,2],[3,4]], "source": "manual"}'
+```
+
+## 💡 Ejemplos de Uso Avanzados
+
+### Ejemplo QR con matriz rectangular (m×n, m≥n)
+```bash
+curl -X POST http://localhost:8080/qr \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matrix": [
+      [1, 2],
+      [3, 4],
+      [5, 6]
+    ]
+  }'
+```
+
+### Ejemplo QR con matriz cuadrada
+```bash
+curl -X POST http://localhost:8080/qr \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matrix": [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9]
+    ]
+  }'
+```
+
+### Rotación a la izquierda (anti-horario)
+```bash
+curl -X POST http://localhost:8080/rotate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matrix": [
+      [1, 2],
+      [3, 4]
+    ],
+    "direction": "left"
+  }'
+```
+
+### Estadísticas directas (bypassing go-api)
+```bash
+curl -X POST http://localhost:3000/stats \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matrix": [
+      [1, 0, 0],
+      [0, 2, 0],
+      [0, 0, 3]
+    ],
+    "source": "diagonal-test"
+  }'
 ```
 
 ## 🛠️ Tecnologías Utilizadas

@@ -1,22 +1,18 @@
-version: '3.8'
-
 services:
   go-api:
     build:
       context: ./go-api
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "8080:8080"
     environment:
-      - PORT=3001
+      - PORT=8080
+      - NODE_API_URL=http://node-api:3000
+      - DOCKER_ENV=true
     networks:
       - api-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    depends_on:
+      - node-api
     restart: unless-stopped
 
   node-api:
@@ -24,14 +20,14 @@ services:
       context: ./node-api
       dockerfile: Dockerfile
     ports:
-      - "3002:3002"
+      - "3000:3000"
     environment:
-      - PORT=3002
+      - PORT=3000
       - NODE_ENV=production
     networks:
       - api-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
