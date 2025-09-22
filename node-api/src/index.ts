@@ -1,45 +1,75 @@
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
-import { statsRouter } from './routes/stats';
-import { healthRouter } from './routes/health';
+import cors from 'cors';
+import routes from './routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Middleware de seguridad y configuración
 app.use(helmet());
-app.use(cors());
-app.use(morgan('combined'));
-app.use(express.json({ limit: '10mb' }));
 
-// Error handling middleware
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction): void => {
-  if (error instanceof SyntaxError && 'body' in error) {
-    res.status(400).json({ error: 'Invalid JSON format' });
-    return;
-  }
+// CORS abierto para desarrollo local
+app.use(cors({
+  origin: true, // Permite cualquier origen en desarrollo
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
+
+// Parser de JSON con límite
+app.use(express.json({ 
+  limit: '10mb',
+  strict: true 
+}));
+
+// Middleware de logging simple
+app.use((req, _res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path}`);
   next();
 });
 
-// Routes
-app.use('/health', healthRouter);
-app.use('/stats', statsRouter);
-
-// 404 handler
-app.use('*', (req: express.Request, res: express.Response) => {
-  res.status(404).json({ error: 'Endpoint not found' });
+// Error handling para JSON malformado
+app.use((error: any, _req: express.Request, res: express.Response, next: express.NextFunction): void => {
+  if (error instanceof SyntaxError && 'body' in error) {
+    res.status(400).json({ 
+      error: 'Invalid JSON format in request body' 
+    });
+    return;
+  }
+  next(error);
 });
 
-// Global error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Rutas principales
+app.use('/', routes);
+
+// Middleware global de manejo de errores
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction): void => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({ 
+    error: 'Internal server error' 
+  });
 });
 
+// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Node API ejecutándose en puerto ${PORT}`);
+  console.log(`🔗 Endpoints disponibles:`);
+  console.log(`   GET  /health`);
+  console.log(`   POST /stats`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Manejo de señales para graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('📴 Received SIGTERM, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('📴 Received SIGINT, shutting down gracefully');
+  process.exit(0);
 });
 
 export default app;
