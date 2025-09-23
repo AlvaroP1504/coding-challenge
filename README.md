@@ -41,13 +41,13 @@ cd coding-challenge
 docker-compose up --build
 
 # En otra terminal, verificar que funcionan
-curl http://localhost:3001/health
-curl http://localhost:3002/health
+curl http://localhost:8080/health
+curl http://localhost:3000/health
 ```
 
 ### Desarrollo Local
 
-#### Go API (Puerto 3001)
+#### Go API (Puerto 8080)
 
 ```bash
 cd go-api
@@ -62,7 +62,7 @@ go run main.go
 go test -v
 ```
 
-#### Node API (Puerto 3002)
+#### Node API (Puerto 3000)
 
 ```bash
 cd node-api
